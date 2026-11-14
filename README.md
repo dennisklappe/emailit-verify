@@ -17,6 +17,8 @@ npm run deploy
 
 Generate a token with `openssl rand -hex 32`. Rotate by editing `TOKENS`; there is no redeploy needed beyond setting the secret.
 
+Typo precheck: the variable `TYPO_PRECHECK` (default `on`, set `off` to disable; add it under `vars` in `wrangler.jsonc` or as a secret/variable in the dashboard). See below.
+
 Optional, in `wrangler.jsonc`:
 
 - A KV namespace bound as `CACHE`: results are cached per address for 24 hours (a verification costs credits at Emailit). Upstream failures are never cached.
@@ -41,13 +43,23 @@ curl -X POST https://verify.example.com/ \
 
 | Field | Meaning |
 |---|---|
-| `block` | `true` only for clear failures: invalid syntax, no MX records, or a disposable domain. Role accounts (`info@`, `test@`) are allowed. |
+| `block` | `true` only for clear failures: invalid syntax, no MX records, or a disposable domain. A typo of a popular provider never blocks (someone may really own `gnail.com`); it sets `suggest: true` instead. Role accounts (`info@`, `test@`) are allowed. |
 | `ok` | The opposite of `block`. |
-| `reason` | `invalid_syntax`, `no_mx`, `disposable`, or `null`. |
-| `did_you_mean` | Emailit's typo suggestion, passed on unchanged so you can show it as a hint. Fast mode is lenient (`test@gnail.com` scores low risk but suggests `gmail.com`), so this is not a block reason. |
+| `reason` | `invalid_syntax`, `no_mx`, `disposable`, `typo_domain` (with `block: false`, `suggest: true`), or `null`. |
+| `did_you_mean` | A suggested corrected address, to show as a hint. For `typo_domain` it is the full corrected address (`test@gmail.com`); otherwise it is Emailit's suggestion, unchanged. |
 | `risk`, `score` | Emailit's values. |
 
 Other statuses: `401` bad or missing token, `400` bad body, `405` not a POST, `503` not configured.
+
+### Typo precheck
+
+Emailit's fast mode is lenient: `test@gnail.com` scores low risk and only gets a suggestion. So before calling Emailit (no credits spent), the Worker checks the domain against popular providers (gmail, googlemail, hotmail, outlook, live, msn, yahoo, icloud, ziggo, kpnmail, home.nl) and answers, without blocking (show the suggestion and let the user confirm),
+
+```json
+{ "ok": true, "block": false, "reason": "typo_domain", "suggest": true, "did_you_mean": "test@gmail.com", "risk": "medium", "score": 0, "source": "precheck" }
+```
+
+for misspellings (`gnail.com`, `gmial.com`, `hotmial.com`, `outlok.com`), wrong TLDs on the big brands (`gmail.co`, `gmail.con`, `gmail.nl`, `outlook.nl`), and dot or dash variants (`g-mail.com`, `gmailcom`). It is deliberately conservative: real provider domains (`hotmail.nl`, `live.nl`, `yahoo.co.uk`) pass, only labels of 5+ characters are fuzzy matched (one edit, same TLD group), and unrelated domains pass. Set `TYPO_PRECHECK=off` to skip it.
 
 ### Fail open
 

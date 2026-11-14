@@ -5,6 +5,8 @@
   "workers_dev": true,
   "keep_vars": true,
   "observability": { "enabled": true }
+  // Optional: "off" disables the local typo precheck (default on):
+  // "vars": { "TYPO_PRECHECK": "on" },
   // Optional: 24h result cache. Create a namespace (`wrangler kv namespace create emailit-verify-cache`) and add:
   // "kv_namespaces": [{ "binding": "CACHE", "id": "<namespace id>" }],
   // Optional: serve on your own domain:

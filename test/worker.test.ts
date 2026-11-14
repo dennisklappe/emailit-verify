@@ -61,9 +61,9 @@ describe("verification", () => {
 		}
 	});
 	it("does not block role accounts and returns did_you_mean unchanged", async () => {
-		vi.spyOn(globalThis, "fetch").mockResolvedValue(emailit({ role_account: true }, { did_you_mean: "test@gmail.com" }));
-		const r: any = await (await call({ email: "test@gnail.com" })).json();
-		expect(r).toMatchObject({ ok: true, block: false, did_you_mean: "test@gmail.com", score: 100 });
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(emailit({ role_account: true }, { did_you_mean: "test@smallcompany.io" }));
+		const r: any = await (await call({ email: "test@smalcompany.io" })).json();
+		expect(r).toMatchObject({ ok: true, block: false, did_you_mean: "test@smallcompany.io", score: 100 });
 	});
 	it("rejects garbage without calling upstream", async () => {
 		const f = vi.spyOn(globalThis, "fetch");
@@ -77,6 +77,21 @@ describe("verification", () => {
 	});
 	it("405 on GET", async () => {
 		expect((await call(null, TOKEN, env(), "GET")).status).toBe(405);
+	});
+});
+
+describe("typo precheck", () => {
+	it("suggests (no block) before calling Emailit and returns the corrected address", async () => {
+		const f = vi.spyOn(globalThis, "fetch");
+		const r = await (await call({ email: "test@gnail.com" })).json();
+		expect(r).toEqual({ ok: true, block: false, reason: "typo_domain", suggest: true, did_you_mean: "test@gmail.com", risk: "medium", score: 0, source: "precheck" });
+		expect(f).not.toHaveBeenCalled();
+	});
+	it("TYPO_PRECHECK=off sends it to Emailit instead", async () => {
+		const f = vi.spyOn(globalThis, "fetch").mockResolvedValue(emailit({}, { did_you_mean: "test@gmail.com" }));
+		const r: any = await (await call({ email: "test@gnail.com" }, TOKEN, env({ TYPO_PRECHECK: "off" }))).json();
+		expect(f).toHaveBeenCalledTimes(1);
+		expect(r).toMatchObject({ block: false, did_you_mean: "test@gmail.com" });
 	});
 });
 
