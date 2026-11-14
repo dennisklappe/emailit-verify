@@ -10,7 +10,7 @@ export interface Env {
 export interface Result {
 	ok: boolean;
 	block: boolean;
-	reason: "invalid_syntax" | "no_mx" | "disposable" | null;
+	reason: "invalid_syntax" | "no_mx" | "disposable" | "typo_domain" | null;
 	did_you_mean: string | null;
 	risk: string;
 	score: number;
@@ -20,6 +20,13 @@ const UPSTREAM = "https://api.emailit.com/v2/email-verifications";
 const TIMEOUT_MS = 3000;
 const CACHE_TTL = 24 * 60 * 60;
 const MAX_EMAIL = 320;
+/** A suggestion to one of these domains is trusted enough to block (gnail.com -> gmail.com). */
+const MAJOR_PROVIDERS = new Set([
+	"gmail.com", "googlemail.com", "hotmail.com", "outlook.com", "live.com", "live.nl", "msn.com",
+	"yahoo.com", "icloud.com", "ziggo.nl", "kpnmail.nl", "home.nl", "hotmail.nl",
+]);
+const domainOf = (a: string) => a.slice(a.lastIndexOf("@") + 1).toLowerCase();
+
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+$/;
 
 const json = (body: unknown, status = 200) =>
@@ -59,12 +66,16 @@ export async function authenticate(header: string | null, tokensJson: string): P
 	return found;
 }
 
-export function toResult(v: any): Result {
+export function toResult(v: any, typed?: string): Result {
 	const checks = v?.checks ?? {};
 	let reason: Result["reason"] = null;
 	if (checks.valid_syntax === false) reason = "invalid_syntax";
 	else if (checks.has_mx_records === false) reason = "no_mx";
 	else if (checks.disposable === true) reason = "disposable";
+	else if (typed && typeof v?.did_you_mean === "string") {
+		const suggested = domainOf(v.did_you_mean);
+		if (MAJOR_PROVIDERS.has(suggested) && suggested !== domainOf(typed)) reason = "typo_domain";
+	}
 	return {
 		ok: reason === null,
 		block: reason !== null,
@@ -86,7 +97,7 @@ async function verify(email: string, env: Env): Promise<Result | null> {
 			signal: ctrl.signal,
 		});
 		if (!res.ok) return null;
-		return toResult(await res.json());
+		return toResult(await res.json(), email);
 	} catch {
 		return null;
 	} finally {

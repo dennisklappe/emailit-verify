@@ -41,10 +41,10 @@ curl -X POST https://verify.example.com/ \
 
 | Field | Meaning |
 |---|---|
-| `block` | `true` only for clear failures: invalid syntax, no MX records, or a disposable domain. Role accounts (`info@`, `test@`) are allowed. |
+| `block` | `true` only for clear failures: invalid syntax, no MX records, a disposable domain, or a typo of a major mail provider (see `typo_domain`). Role accounts (`info@`, `test@`) are allowed. |
 | `ok` | The opposite of `block`. |
-| `reason` | `invalid_syntax`, `no_mx`, `disposable`, or `null`. |
-| `did_you_mean` | Emailit's typo suggestion, passed on unchanged so you can show it as a hint. Fast mode is lenient (`test@gnail.com` scores low risk but suggests `gmail.com`), so this is not a block reason. |
+| `reason` | `invalid_syntax`, `no_mx`, `disposable`, `typo_domain`, or `null`. |
+| `did_you_mean` | Emailit's typo suggestion, always passed on unchanged so you can show it as a hint. Fast mode is lenient (`test@gnail.com` scores low risk), so when the suggested domain is a major provider (gmail.com, googlemail.com, hotmail.com, outlook.com, live.com, live.nl, msn.com, yahoo.com, icloud.com, ziggo.nl, kpnmail.nl, home.nl, hotmail.nl) and differs from the typed one, the address is blocked with `reason: "typo_domain"`. Suggestions to other domains never block. |
 | `risk`, `score` | Emailit's values. |
 
 Other statuses: `401` bad or missing token, `400` bad body, `405` not a POST, `503` not configured.

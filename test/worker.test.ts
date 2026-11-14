@@ -60,10 +60,20 @@ describe("verification", () => {
 			expect(r).toMatchObject({ ok: false, block: true, reason });
 		}
 	});
-	it("does not block role accounts and returns did_you_mean unchanged", async () => {
+	it("blocks a typo of a major provider and keeps did_you_mean", async () => {
 		vi.spyOn(globalThis, "fetch").mockResolvedValue(emailit({ role_account: true }, { did_you_mean: "test@gmail.com" }));
 		const r: any = await (await call({ email: "test@gnail.com" })).json();
-		expect(r).toMatchObject({ ok: true, block: false, did_you_mean: "test@gmail.com", score: 100 });
+		expect(r).toMatchObject({ ok: false, block: true, reason: "typo_domain", did_you_mean: "test@gmail.com", score: 100 });
+	});
+	it("does not block when the suggestion is not a major provider or equals the typed domain", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(emailit({}, { did_you_mean: "a@smallcompany.io" }));
+		expect(await (await call({ email: "a@smalcompany.io" })).json()).toMatchObject({ block: false, did_you_mean: "a@smallcompany.io" });
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(emailit({}, { did_you_mean: "a@gmail.com" }));
+		expect(await (await call({ email: "a@gmail.com" })).json()).toMatchObject({ block: false });
+	});
+	it("does not block role accounts", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(emailit({ role_account: true }));
+		expect(await (await call({ email: "info@example.com" })).json()).toMatchObject({ ok: true, block: false });
 	});
 	it("rejects garbage without calling upstream", async () => {
 		const f = vi.spyOn(globalThis, "fetch");
