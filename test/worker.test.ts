@@ -140,6 +140,24 @@ describe("precheck mode", () => {
 	});
 });
 
+describe("client script", () => {
+	const get = (path: string, method = "GET") => worker.fetch(new Request("https://verify.example.com" + path, { method }), env(), ctx);
+	it("is served without auth, cacheable, with open CORS", async () => {
+		for (const path of ["/client.js", "/client.v1.js"]) {
+			const res = await get(path);
+			expect(res.status).toBe(200);
+			expect(res.headers.get("content-type")).toContain("application/javascript");
+			expect(res.headers.get("access-control-allow-origin")).toBe("*");
+			expect(res.headers.get("cache-control")).toContain("max-age");
+			expect(await res.text()).toContain("EmailitVerify");
+		}
+		expect((await get("/client.v1.js")).headers.get("cache-control")).toContain("immutable");
+	});
+	it("POST to the script path is not served", async () => {
+		expect((await get("/client.js", "POST")).status).toBe(404);
+	});
+});
+
 describe("fail open", () => {
 	it("on upstream error status", async () => {
 		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("no", { status: 403 }));

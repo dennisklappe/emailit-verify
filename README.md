@@ -81,3 +81,61 @@ npm test
 ## License
 
 MIT
+
+## Browser client (inline "did you mean")
+
+The Worker serves a small dependency-free script, with no token in it:
+
+- `https://verify.example.com/client.v1.js` (immutable, cache for a year)
+- `https://verify.example.com/client.js` (alias, cached for an hour)
+
+```html
+<input id="email" type="email" name="email">
+<script src="https://verify.example.com/client.v1.js"></script>
+<script>
+  const ev = EmailitVerify.attach(document.getElementById("email"), {
+    endpoint: "/api/verify-email", // your own proxy route, see below
+    lang: "en",                    // en, nl, de, es, fr, sv, da
+    // messages: { keep: "No thanks" },   // override any text
+    // onState: (s) => console.log(s),    // idle, checking, suggest, kept, used, ok, blocked
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const r = await EmailitVerify.check(document.getElementById("email"));
+    if (r.ok) form.submit(); // r.ok is false only for a hard block, the error is already shown
+  });
+</script>
+```
+
+Behaviour:
+
+- While typing (600 ms after the last key, and on blur) it calls your endpoint with `mode: "precheck"` (free, local). A typo shows "Did you mean name@gmail.com?" with "Use name@gmail.com" and "No, keep mine". Keep-mine is remembered for that exact address and forgotten on edit. Stale answers are ignored, typing is never blocked, any failure is silent.
+- `EmailitVerify.check(input)` is for submit. It calls your endpoint once with `mode: "full"` (cached per address) and only hard blocks stop (`block: true`: `invalid_syntax`, `no_mx`, `disposable`), with "We cannot reach name@domain, please check the address". A soft suggestion never stops the submit and is not shown again for an address the person kept. After 3 seconds it passes.
+- Markup is `div.ev-msg[aria-live=polite]` after the input with `.ev-box`, `.ev-btn`, `.ev-error` classes and neutral styling. Pass `css: false` to skip the injected style and style it yourself.
+
+The endpoint must be a route on your own site that adds the bearer token and forwards the body to the Worker (the browser never sees the token).
+
+### Proxy route helper
+
+`src/helper.ts` (copy it into your project, no dependencies, Workers and Node 18+) has `verifyEmail(email, { url, token, mode, timeoutMs })`, which never throws and fails open, and `decide(result, { email, keptFor })`, which implements the soft/hard rules.
+
+```ts
+import { Hono } from "hono";
+import { verifyEmail } from "./helper";
+
+const app = new Hono<{ Bindings: { VERIFY_URL: string; VERIFY_TOKEN: string } }>();
+
+app.post("/api/verify-email", async (c) => {
+  const { email, mode } = await c.req.json<{ email?: string; mode?: string }>();
+  if (typeof email !== "string") return c.json({ error: "bad_request" }, 400);
+  const result = await verifyEmail(email, {
+    url: c.env.VERIFY_URL,
+    token: c.env.VERIFY_TOKEN,
+    mode: mode === "precheck" ? "precheck" : "full",
+  });
+  return c.json(result);
+});
+```
+
+Server-side on signup, call `verifyEmail(email, {...})` and `decide(result, { email, keptFor })`: `allow: false` means reject, `suggest` is the soft hint to show.
