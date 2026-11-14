@@ -86,12 +86,13 @@ MIT
 
 The Worker serves a small dependency-free script, with no token in it:
 
-- `https://verify.example.com/client.v1.js` (immutable, cache for a year)
-- `https://verify.example.com/client.js` (alias, cached for an hour)
+- `https://verify.example.com/client.v2.js` (immutable, cache for a year)
+- `https://verify.example.com/client.js` (alias of the latest version, cached for an hour)
+- `https://verify.example.com/client.v1.js` (frozen first version: a suggestion never stops the submit)
 
 ```html
 <input id="email" type="email" name="email">
-<script src="https://verify.example.com/client.v1.js"></script>
+<script src="https://verify.example.com/client.v2.js"></script>
 <script>
   const ev = EmailitVerify.attach(document.getElementById("email"), {
     endpoint: "/api/verify-email", // your own proxy route, see below
@@ -103,7 +104,7 @@ The Worker serves a small dependency-free script, with no token in it:
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const r = await EmailitVerify.check(document.getElementById("email"));
-    if (r.ok) form.submit(); // r.ok is false only for a hard block, the error is already shown
+    if (r.ok) form.submit(); // false for a hard block or an undecided suggestion, the UI is already shown
   });
 </script>
 ```
@@ -111,7 +112,7 @@ The Worker serves a small dependency-free script, with no token in it:
 Behaviour:
 
 - While typing (600 ms after the last key, and on blur) it calls your endpoint with `mode: "precheck"` (free, local). A typo shows "Did you mean name@gmail.com?" with "Use name@gmail.com" and "No, keep mine". Keep-mine is remembered for that exact address and forgotten on edit. Stale answers are ignored, typing is never blocked, any failure is silent.
-- `EmailitVerify.check(input)` is for submit. It calls your endpoint once with `mode: "full"` (cached per address) and only hard blocks stop (`block: true`: `invalid_syntax`, `no_mx`, `disposable`), with "We cannot reach name@domain, please check the address". A soft suggestion never stops the submit and is not shown again for an address the person kept. After 3 seconds it passes.
+- `EmailitVerify.check(input)` is for submit. It calls your endpoint once with `mode: "full"` (cached per address) and only hard blocks stop (`block: true`: `invalid_syntax`, `no_mx`, `disposable`), with "We cannot reach name@domain, please check the address". In v2 a suggestion the person has not yet answered does stop the submit: `check()` returns `{ ok: false, pending: "suggestion", suggest }`, scrolls the hint into view, moves focus to the "Use" button, announces the choice through an aria-live region and shakes the box (with `prefers-reduced-motion` only a full-border highlight stays), on every attempt. Once the person clicks "Use" or "No, keep mine" the submit passes, and the suggestion is not shown again for an address they kept. (v1 never stopped the submit.) After 3 seconds it passes.
 - Markup is `div.ev-msg[aria-live=polite]` after the input with `.ev-box`, `.ev-btn`, `.ev-error` classes and neutral styling. Pass `css: false` to skip the injected style and style it yourself.
 
 The endpoint must be a route on your own site that adds the bearer token and forwards the body to the Worker (the browser never sees the token).

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import clientSource from "../client/client.js?raw";
-import { CLIENT_JS } from "../src/client-source";
+import clientV1 from "../client/client.v1.js?raw";
+import { CLIENT_JS, CLIENT_V1 } from "../src/client-source";
 
 const EV = () => (window as any).EmailitVerify;
 let calls: { email: string; mode: string }[];
@@ -42,6 +43,11 @@ const buttons = () => [...document.querySelectorAll<HTMLButtonElement>(".ev-btn"
 describe("served source", () => {
 	it("the generated Worker copy matches client/client.js (run npm run build:client)", () => {
 		expect(CLIENT_JS).toBe(clientSource);
+	});
+	it("v1 stays frozen and available, and does not block on a pending suggestion", () => {
+		expect(CLIENT_V1).toBe(clientV1);
+		expect(clientV1).not.toContain("pending");
+		expect(clientSource).toContain("version: 2");
 	});
 	it("contains no token and exposes the API", () => {
 		expect(clientSource).not.toMatch(/bearer/i);
@@ -167,5 +173,77 @@ describe("keep mine and submit", () => {
 		const p = EV().check(input());
 		await settle(3200);
 		expect(await p).toMatchObject({ ok: true, block: false, error: "timeout" });
+	});
+});
+
+describe("pending suggestion stops the submit (v2)", () => {
+	const submit = async () => {
+		const p = EV().check(input());
+		await settle(10);
+		return p;
+	};
+	const setup = async () => {
+		responder = (_e, _m) => typo;
+		EV().attach(input(), { endpoint: "/x" });
+		type("test@gnail.com");
+		await settle();
+	};
+
+	it("returns pending, focuses Use, highlights it and announces, on every attempt", async () => {
+		await setup();
+		const box = () => document.querySelector(".ev-suggest") as HTMLElement;
+		const scroll = vi.fn();
+		box().scrollIntoView = scroll;
+		for (let attempt = 1; attempt <= 3; attempt++) {
+			const r = await submit();
+			expect(r).toMatchObject({ ok: false, pending: "suggestion", suggest: "test@gmail.com" });
+			expect(box().classList.contains("ev-attn")).toBe(true);
+			expect(document.activeElement).toBe(document.querySelector(".ev-use"));
+			expect(document.querySelector(".ev-use")!.classList.contains("ev-primary")).toBe(true);
+			await settle(50);
+			expect(document.querySelector(".ev-sr")!.textContent).toBe("Please choose: use test@gmail.com or keep your address");
+			expect(scroll).toHaveBeenCalledTimes(attempt);
+			await settle(1000);
+			expect(box().classList.contains("ev-attn")).toBe(false); // animation class is removed, so the next attempt replays it
+		}
+	});
+	it("the first submit before the live check answered is also stopped", async () => {
+		responder = (_e, mode) => (mode === "full" ? typo : fine);
+		EV().attach(input(), { endpoint: "/x" });
+		type("test@gnail.com");
+		const r = await submit(); // no debounce elapsed yet
+		expect(r).toMatchObject({ ok: false, pending: "suggestion" });
+		expect(document.querySelector(".ev-suggest")).not.toBeNull();
+	});
+	it("keep mine, then submit passes", async () => {
+		await setup();
+		await submit();
+		(document.querySelector(".ev-keep") as HTMLButtonElement).click();
+		expect(await submit()).toMatchObject({ ok: true });
+		expect(document.querySelector(".ev-suggest")).toBeNull();
+	});
+	it("use replaces the address and the submit passes", async () => {
+		responder = (e) => (e.includes("gnail") ? typo : fine);
+		EV().attach(input(), { endpoint: "/x" });
+		type("test@gnail.com");
+		await settle();
+		(document.querySelector(".ev-use") as HTMLButtonElement).click();
+		await settle();
+		expect(input().value).toBe("test@gmail.com");
+		expect(await submit()).toMatchObject({ ok: true });
+	});
+	it("editing the address resets the pending state", async () => {
+		await setup();
+		await submit();
+		type("other@example.com");
+		responder = () => fine;
+		await settle();
+		expect(await submit()).toMatchObject({ ok: true });
+	});
+	it("uses a full-border highlight and no side or top accent bar in the css", () => {
+		const css = clientSource.match(/\.ev-box\.ev-attn\{[^}]*\}/)![0];
+		expect(css).toContain("box-shadow:0 0 0 2px");
+		expect(clientSource).not.toMatch(/border-(left|top|inline-start|block-start)\s*:/);
+		expect(clientSource).toContain("prefers-reduced-motion:reduce");
 	});
 });

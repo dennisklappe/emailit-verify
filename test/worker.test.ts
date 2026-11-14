@@ -143,7 +143,7 @@ describe("precheck mode", () => {
 describe("client script", () => {
 	const get = (path: string, method = "GET") => worker.fetch(new Request("https://verify.example.com" + path, { method }), env(), ctx);
 	it("is served without auth, cacheable, with open CORS", async () => {
-		for (const path of ["/client.js", "/client.v1.js"]) {
+		for (const path of ["/client.js", "/client.v1.js", "/client.v2.js"]) {
 			const res = await get(path);
 			expect(res.status).toBe(200);
 			expect(res.headers.get("content-type")).toContain("application/javascript");
@@ -152,6 +152,9 @@ describe("client script", () => {
 			expect(await res.text()).toContain("EmailitVerify");
 		}
 		expect((await get("/client.v1.js")).headers.get("cache-control")).toContain("immutable");
+		expect((await get("/client.v2.js")).headers.get("cache-control")).toContain("immutable");
+		expect(await (await get("/client.v1.js")).text()).not.toContain("pending");
+		expect(await (await get("/client.js")).text()).toContain("pending");
 	});
 	it("POST to the script path is not served", async () => {
 		expect((await get("/client.js", "POST")).status).toBe(404);
