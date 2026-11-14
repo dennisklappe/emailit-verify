@@ -81,10 +81,10 @@ describe("verification", () => {
 });
 
 describe("typo precheck", () => {
-	it("blocks before calling Emailit and returns the corrected address", async () => {
+	it("suggests (no block) before calling Emailit and returns the corrected address", async () => {
 		const f = vi.spyOn(globalThis, "fetch");
 		const r = await (await call({ email: "test@gnail.com" })).json();
-		expect(r).toEqual({ ok: false, block: true, reason: "typo_domain", did_you_mean: "test@gmail.com", risk: "high", score: 0, source: "precheck" });
+		expect(r).toEqual({ ok: true, block: false, reason: "typo_domain", suggest: true, did_you_mean: "test@gmail.com", risk: "medium", score: 0, source: "precheck" });
 		expect(f).not.toHaveBeenCalled();
 	});
 	it("TYPO_PRECHECK=off sends it to Emailit instead", async () => {

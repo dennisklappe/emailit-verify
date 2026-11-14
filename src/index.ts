@@ -16,6 +16,7 @@ export interface Result {
 	block: boolean;
 	reason: "invalid_syntax" | "no_mx" | "disposable" | "typo_domain" | null;
 	source?: "precheck";
+	suggest?: boolean;
 	did_you_mean: string | null;
 	risk: string;
 	score: number;
@@ -131,7 +132,8 @@ export default {
 		if ((env.TYPO_PRECHECK ?? "on").toLowerCase() !== "off") {
 			const hit = typoPrecheck(addr);
 			if (hit) {
-				return json({ ok: false, block: true, reason: "typo_domain", did_you_mean: hit.did_you_mean, risk: "high", score: 0, source: "precheck" });
+				// Never a hard block: someone may really own gnail.com. The caller shows the suggestion.
+				return json({ ok: true, block: false, reason: "typo_domain", suggest: true, did_you_mean: hit.did_you_mean, risk: "medium", score: 0, source: "precheck" });
 			}
 		}
 
