@@ -91,15 +91,18 @@ describe("fail open", () => {
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({ ok: true, block: false, error: "upstream" });
 	});
-	it("on timeout", async () => {
-		vi.useFakeTimers();
+	it("on timeout (3s abort)", async () => {
+		const real = globalThis.setTimeout;
+		let delay = 0;
+		vi.spyOn(globalThis, "setTimeout").mockImplementation(((fn: () => void, ms?: number) => {
+			delay = ms ?? 0;
+			return real(fn, 0);
+		}) as typeof setTimeout);
 		vi.spyOn(globalThis, "fetch").mockImplementation(
 			(_u, init) => new Promise((_, rej) => (init as RequestInit).signal!.addEventListener("abort", () => rej(new Error("aborted")))),
 		);
-		const p = call({ email: "a@b.co" });
-		for (let i = 0; i < 5; i++) await vi.advanceTimersByTimeAsync(1000);
-		expect(await (await p).json()).toEqual({ ok: true, block: false, error: "upstream" });
-		vi.useRealTimers();
+		expect(await (await call({ email: "a@b.co" })).json()).toEqual({ ok: true, block: false, error: "upstream" });
+		expect(delay).toBe(3000);
 	});
 });
 
