@@ -1,4 +1,4 @@
-import { typoPrecheck } from "./precheck";
+import { isDisposable, strictSyntax, typoPrecheck } from "./precheck";
 
 export interface Env {
 	/** Emailit API key with `full` scope. */
@@ -17,6 +17,7 @@ export interface Result {
 	reason: "invalid_syntax" | "no_mx" | "disposable" | "typo_domain" | null;
 	source?: "precheck";
 	suggest?: boolean;
+	mode?: "precheck";
 	did_you_mean: string | null;
 	risk: string;
 	score: number;
@@ -27,6 +28,20 @@ const TIMEOUT_MS = 3000;
 const CACHE_TTL = 24 * 60 * 60;
 const MAX_EMAIL = 320;
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+$/;
+
+/** Local-only checks for the precheck mode: never calls Emailit, never spends credits. */
+export function localCheck(addr: string): Result {
+	const base = { ok: true, block: false, reason: null, did_you_mean: null, risk: "low", score: 0 } as Result;
+	if (!strictSyntax(addr)) {
+		const typo = typoPrecheck(addr);
+		if (typo) return { ...base, reason: "typo_domain", suggest: true, did_you_mean: typo.did_you_mean, risk: "medium", source: "precheck" };
+		return { ok: false, block: true, reason: "invalid_syntax", did_you_mean: null, risk: "high", score: 0 };
+	}
+	const typo = typoPrecheck(addr);
+	if (typo) return { ...base, reason: "typo_domain", suggest: true, did_you_mean: typo.did_you_mean, risk: "medium", source: "precheck" };
+	if (isDisposable(addr)) return { ok: false, block: true, reason: "disposable", did_you_mean: null, risk: "high", score: 0 };
+	return base;
+}
 
 const json = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), {
@@ -115,14 +130,20 @@ export default {
 		if (!caller) return json({ error: "unauthorized" }, 401);
 
 		let email: unknown;
+		let mode: unknown = new URL(req.url).searchParams.get("mode");
 		try {
-			email = ((await req.json()) as any)?.email;
+			const body = (await req.json()) as any;
+			email = body?.email;
+			if (body?.mode !== undefined) mode = body.mode;
 		} catch {
 			return json({ error: "bad_request" }, 400);
 		}
+		if (mode !== null && mode !== "full" && mode !== "precheck") return json({ error: "bad_request" }, 400);
 		if (typeof email !== "string" || email.length > MAX_EMAIL) return json({ error: "bad_request" }, 400);
 		email = email.trim().toLowerCase();
 		const addr = email as string;
+
+		if (mode === "precheck") return json({ ...localCheck(addr), mode: "precheck" });
 
 		// Obvious garbage never costs a credit.
 		if (!EMAIL_SHAPE.test(addr)) {
