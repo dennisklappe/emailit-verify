@@ -1,15 +1,15 @@
-/*! emailit-verify client v1. Vanilla JS, no dependencies, no token. https://github.com/dennisklappe/emailit-verify */
+/*! emailit-verify client v2. Vanilla JS, no dependencies, no token. https://github.com/dennisklappe/emailit-verify */
 (function (root) {
 	"use strict";
 
 	var MESSAGES = {
-		en: { didYouMean: "Did you mean {suggestion}?", use: "Use {suggestion}", keep: "No, keep mine", blocked: "We cannot reach {email}, please check the address" },
-		nl: { didYouMean: "Bedoelde je {suggestion}?", use: "Gebruik {suggestion}", keep: "Nee, laat zoals het is", blocked: "We kunnen {email} niet bereiken, controleer het adres" },
-		de: { didYouMean: "Meinten Sie {suggestion}?", use: "{suggestion} verwenden", keep: "Nein, so lassen", blocked: "Wir können {email} nicht erreichen, bitte prüfen Sie die Adresse" },
-		es: { didYouMean: "¿Quisiste decir {suggestion}?", use: "Usar {suggestion}", keep: "No, dejar el mío", blocked: "No podemos contactar con {email}, revisa la dirección" },
-		fr: { didYouMean: "Vouliez-vous dire {suggestion} ?", use: "Utiliser {suggestion}", keep: "Non, garder la mienne", blocked: "Nous ne pouvons pas joindre {email}, vérifiez l'adresse" },
-		sv: { didYouMean: "Menade du {suggestion}?", use: "Använd {suggestion}", keep: "Nej, behåll min", blocked: "Vi kan inte nå {email}, kontrollera adressen" },
-		da: { didYouMean: "Mente du {suggestion}?", use: "Brug {suggestion}", keep: "Nej, behold min", blocked: "Vi kan ikke nå {email}, tjek adressen" },
+		en: { choose: "Please choose: use {suggestion} or keep your address", didYouMean: "Did you mean {suggestion}?", use: "Use {suggestion}", keep: "No, keep mine", blocked: "We cannot reach {email}, please check the address" },
+		nl: { choose: "Maak een keuze: gebruik {suggestion} of laat je adres zoals het is", didYouMean: "Bedoelde je {suggestion}?", use: "Gebruik {suggestion}", keep: "Nee, laat zoals het is", blocked: "We kunnen {email} niet bereiken, controleer het adres" },
+		de: { choose: "Bitte wählen: {suggestion} verwenden oder Ihre Adresse behalten", didYouMean: "Meinten Sie {suggestion}?", use: "{suggestion} verwenden", keep: "Nein, so lassen", blocked: "Wir können {email} nicht erreichen, bitte prüfen Sie die Adresse" },
+		es: { choose: "Elige una opción: usar {suggestion} o mantener tu dirección", didYouMean: "¿Quisiste decir {suggestion}?", use: "Usar {suggestion}", keep: "No, dejar el mío", blocked: "No podemos contactar con {email}, revisa la dirección" },
+		fr: { choose: "Choisissez : utiliser {suggestion} ou garder votre adresse", didYouMean: "Vouliez-vous dire {suggestion} ?", use: "Utiliser {suggestion}", keep: "Non, garder la mienne", blocked: "Nous ne pouvons pas joindre {email}, vérifiez l'adresse" },
+		sv: { choose: "Välj: använd {suggestion} eller behåll din adress", didYouMean: "Menade du {suggestion}?", use: "Använd {suggestion}", keep: "Nej, behåll min", blocked: "Vi kan inte nå {email}, kontrollera adressen" },
+		da: { choose: "Vælg: brug {suggestion} eller behold din adresse", didYouMean: "Mente du {suggestion}?", use: "Brug {suggestion}", keep: "Nej, behold min", blocked: "Vi kan ikke nå {email}, tjek adressen" },
 	};
 
 	var CSS =
@@ -18,7 +18,12 @@
 		".ev-box{display:flex;flex-wrap:wrap;align-items:center;gap:.5em;padding:.5em .75em;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:rgba(128,128,128,.1)}" +
 		".ev-text{flex:1 1 auto}" +
 		".ev-btn{font:inherit;font-size:.95em;padding:.2em .6em;border:1px solid rgba(128,128,128,.5);border-radius:4px;background:transparent;color:inherit;cursor:pointer}" +
-		".ev-btn:hover,.ev-btn:focus-visible{background:rgba(128,128,128,.2)}";
+		".ev-btn:hover,.ev-btn:focus-visible{background:rgba(128,128,128,.2)}" +
+		".ev-btn.ev-primary{background:rgba(128,128,128,.3);outline:2px solid currentColor;outline-offset:1px}" +
+		".ev-box.ev-attn{background:rgba(128,128,128,.25);border-color:currentColor;box-shadow:0 0 0 2px currentColor;animation:ev-shake .5s}" +
+		".ev-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}" +
+		"@keyframes ev-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}" +
+		"@media (prefers-reduced-motion:reduce){.ev-box.ev-attn{animation:none}}";
 
 	var TIMEOUT_MS = 3000;
 	var states = typeof WeakMap === "function" ? new WeakMap() : null;
@@ -69,7 +74,7 @@
 		box.setAttribute("aria-live", "polite");
 		input.insertAdjacentElement("afterend", box);
 
-		var st = { seq: 0, timer: null, keptFor: null, full: {}, api: null };
+		var st = { seq: 0, timer: null, keptFor: null, full: {}, api: null, pending: null };
 
 		function norm(v) { return String(v || "").trim(); }
 		function key(v) { return norm(v).toLowerCase(); }
@@ -79,6 +84,7 @@
 			}
 		}
 		function clearBox() {
+			st.pending = null;
 			box.textContent = "";
 			input.removeAttribute("aria-invalid");
 			input.removeAttribute("aria-describedby");
@@ -98,6 +104,7 @@
 		function showSuggestion(email, suggestion) {
 			box.textContent = "";
 			input.removeAttribute("aria-invalid");
+			st.pending = { email: key(email), suggestion: suggestion };
 			var wrap = document.createElement("div");
 			wrap.className = "ev-box ev-suggest";
 			var t = document.createElement("span");
@@ -107,6 +114,9 @@
 			use.type = "button";
 			use.className = "ev-btn ev-use";
 			use.textContent = fill(msgs.use, { suggestion: suggestion });
+			var sr = document.createElement("div");
+			sr.className = "ev-sr";
+			sr.setAttribute("aria-live", "assertive");
 			var keep = document.createElement("button");
 			keep.type = "button";
 			keep.className = "ev-btn ev-keep";
@@ -129,8 +139,33 @@
 			wrap.appendChild(t);
 			wrap.appendChild(use);
 			wrap.appendChild(keep);
+			wrap.appendChild(sr);
 			box.appendChild(wrap);
 			input.setAttribute("aria-describedby", box.id);
+		}
+
+		// A submit was tried while a suggestion is still undecided: make the choice unmistakable.
+		function attention() {
+			var wrap = box.querySelector(".ev-suggest");
+			if (!wrap || !st.pending) return;
+			var use = wrap.querySelector(".ev-use");
+			var sr = wrap.querySelector(".ev-sr");
+			wrap.classList.remove("ev-attn");
+			void wrap.offsetWidth; // restart the animation on every attempt
+			wrap.classList.add("ev-attn");
+			setTimeout(function () { wrap.classList.remove("ev-attn"); }, 900);
+			if (use) {
+				use.classList.add("ev-primary");
+				try { use.focus(); } catch (e) {}
+			}
+			var reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+			try { if (wrap.scrollIntoView) wrap.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" }); } catch (e) {}
+			if (sr) {
+				var text = fill(msgs.choose, { suggestion: st.pending.suggestion });
+				sr.textContent = "";
+				setTimeout(function () { sr.textContent = text; }, 30);
+			}
+			emit("pending", { suggestion: st.pending.suggestion });
 		}
 
 		function suggestionOf(res, email) {
@@ -179,6 +214,10 @@
 			var email = norm(input.value);
 			clearTimeout(st.timer);
 			if (!email) return Promise.resolve({ ok: true, block: false, reason: null, suggest: null });
+			if (st.pending && st.pending.email === key(email)) {
+				attention();
+				return Promise.resolve({ ok: false, block: false, reason: null, pending: "suggestion", suggest: st.pending.suggestion });
+			}
 			var cached = st.full[key(email)];
 			var p = cached ? Promise.resolve(cached) : post(endpoint, email, "full", TIMEOUT_MS);
 			return p.then(function (res) {
@@ -191,8 +230,12 @@
 					return { ok: false, block: true, reason: res.reason || null, suggest: null };
 				}
 				var sug = suggestionOf(res, email);
-				if (sug) showSuggestion(email, sug);
-				return { ok: true, block: false, reason: null, suggest: sug };
+				if (sug) {
+					showSuggestion(email, sug);
+					attention();
+					return { ok: false, block: false, reason: null, pending: "suggestion", suggest: sug };
+				}
+				return { ok: true, block: false, reason: null, suggest: null };
 			});
 		}
 
@@ -210,7 +253,7 @@
 	}
 
 	root.EmailitVerify = {
-		version: 1,
+		version: 2,
 		messages: MESSAGES,
 		attach: attach,
 		check: function (input) {
