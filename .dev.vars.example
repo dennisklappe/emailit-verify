@@ -1,2 +1,3 @@
 EMAILIT_API_KEY=key_xxx
 TOKENS={"my-app":"replace-with-a-long-random-token"}
+TYPO_PRECHECK=on

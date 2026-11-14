@@ -1,8 +1,12 @@
+import { typoPrecheck } from "./precheck";
+
 export interface Env {
 	/** Emailit API key with `full` scope. */
 	EMAILIT_API_KEY: string;
 	/** JSON object: caller name -> bearer token. */
 	TOKENS: string;
+	/** "off" disables the local typo precheck (default on). */
+	TYPO_PRECHECK?: string;
 	/** Optional KV namespace for the 24h result cache. */
 	CACHE?: KVNamespace;
 }
@@ -10,7 +14,8 @@ export interface Env {
 export interface Result {
 	ok: boolean;
 	block: boolean;
-	reason: "invalid_syntax" | "no_mx" | "disposable" | null;
+	reason: "invalid_syntax" | "no_mx" | "disposable" | "typo_domain" | null;
+	source?: "precheck";
 	did_you_mean: string | null;
 	risk: string;
 	score: number;
@@ -121,6 +126,13 @@ export default {
 		// Obvious garbage never costs a credit.
 		if (!EMAIL_SHAPE.test(addr)) {
 			return json({ ok: false, block: true, reason: "invalid_syntax", did_you_mean: null, risk: "high", score: 0 });
+		}
+
+		if ((env.TYPO_PRECHECK ?? "on").toLowerCase() !== "off") {
+			const hit = typoPrecheck(addr);
+			if (hit) {
+				return json({ ok: false, block: true, reason: "typo_domain", did_you_mean: hit.did_you_mean, risk: "high", score: 0, source: "precheck" });
+			}
 		}
 
 		const key = env.CACHE ? await cacheKey(addr) : null;
