@@ -61,9 +61,9 @@ describe("verification", () => {
 		}
 	});
 	it("does not block role accounts and returns did_you_mean unchanged", async () => {
-		vi.spyOn(globalThis, "fetch").mockResolvedValue(emailit({ role_account: true }, { did_you_mean: "test@gmail.com" }));
-		const r: any = await (await call({ email: "test@gnail.com" })).json();
-		expect(r).toMatchObject({ ok: true, block: false, did_you_mean: "test@gmail.com", score: 100 });
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(emailit({ role_account: true }, { did_you_mean: "test@smallcompany.io" }));
+		const r: any = await (await call({ email: "test@smalcompany.io" })).json();
+		expect(r).toMatchObject({ ok: true, block: false, did_you_mean: "test@smallcompany.io", score: 100 });
 	});
 	it("rejects garbage without calling upstream", async () => {
 		const f = vi.spyOn(globalThis, "fetch");
