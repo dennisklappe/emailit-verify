@@ -1,3 +1,4 @@
+import { CLIENT_JS } from "./client-source";
 import { isDisposable, strictSyntax, typoPrecheck } from "./precheck";
 
 export interface Env {
@@ -122,7 +123,17 @@ async function cacheKey(email: string): Promise<string> {
 
 export default {
 	async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		if (new URL(req.url).pathname !== "/") return json({ error: "not_found" }, 404);
+		const path = new URL(req.url).pathname;
+		if ((path === "/client.js" || path === "/client.v1.js") && (req.method === "GET" || req.method === "HEAD")) {
+			return new Response(req.method === "HEAD" ? null : CLIENT_JS, {
+				headers: {
+					"content-type": "application/javascript; charset=utf-8",
+					"cache-control": path === "/client.v1.js" ? "public, max-age=31536000, immutable" : "public, max-age=3600",
+					"access-control-allow-origin": "*",
+				},
+			});
+		}
+		if (path !== "/") return json({ error: "not_found" }, 404);
 		if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 		if (!env.EMAILIT_API_KEY || !env.TOKENS) return json({ error: "not_configured" }, 503);
 
