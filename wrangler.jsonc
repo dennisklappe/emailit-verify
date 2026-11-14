@@ -1,0 +1,12 @@
+{
+  "name": "emailit-verify",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-29",
+  "workers_dev": true,
+  "keep_vars": true,
+  "observability": { "enabled": true }
+  // Optional: 24h result cache. Create a namespace (`wrangler kv namespace create emailit-verify-cache`) and add:
+  // "kv_namespaces": [{ "binding": "CACHE", "id": "<namespace id>" }],
+  // Optional: serve on your own domain:
+  // "routes": [{ "pattern": "verify.example.com", "custom_domain": true }]
+}
