@@ -95,6 +95,51 @@ describe("typo precheck", () => {
 	});
 });
 
+describe("precheck mode", () => {
+	const pre = (email: string, how: "body" | "query" = "body") =>
+		worker.fetch(
+			new Request("https://verify.example.com/" + (how === "query" ? "?mode=precheck" : ""), {
+				method: "POST",
+				headers: { authorization: `Bearer ${TOKEN}` },
+				body: JSON.stringify(how === "body" ? { email, mode: "precheck" } : { email }),
+			}),
+			env(),
+			ctx,
+		).then((r) => r.json() as Promise<any>);
+
+	it("suggests on a typo, never calls Emailit", async () => {
+		const f = vi.spyOn(globalThis, "fetch");
+		expect(await pre("test@gnail.com")).toEqual({ ok: true, block: false, reason: "typo_domain", suggest: true, did_you_mean: "test@gmail.com", risk: "medium", score: 0, source: "precheck", mode: "precheck" });
+		expect(await pre("a@gmail.nl", "query")).toMatchObject({ suggest: true, did_you_mean: "a@gmail.com", mode: "precheck" });
+		expect(f).not.toHaveBeenCalled();
+	});
+	it("passes a normal address without an upstream call", async () => {
+		const f = vi.spyOn(globalThis, "fetch");
+		expect(await pre("someone@example.com")).toMatchObject({ ok: true, block: false, reason: null, mode: "precheck" });
+		expect(f).not.toHaveBeenCalled();
+	});
+	it("blocks bad syntax and disposable domains locally", async () => {
+		for (const bad of ["a@b", "a@@b.com", "a b@c.com", "a@-x.com", ".a@x.com"]) {
+			expect(await pre(bad)).toMatchObject({ block: true, reason: "invalid_syntax", mode: "precheck" });
+		}
+		expect(await pre("a@mailinator.com")).toMatchObject({ block: true, reason: "disposable", mode: "precheck" });
+	});
+	it("an unknown mode is a 400, mode full behaves as before", async () => {
+		const res = await worker.fetch(new Request("https://x/", { method: "POST", headers: { authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ email: "a@b.co", mode: "nope" }) }), env(), ctx);
+		expect(res.status).toBe(400);
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(emailit({}));
+		const full = await worker.fetch(new Request("https://x/", { method: "POST", headers: { authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ email: "a@b.co", mode: "full" }) }), env(), ctx);
+		expect(((await full.json()) as any).mode).toBeUndefined();
+	});
+	it("does not touch the KV cache", async () => {
+		const get = vi.fn();
+		const put = vi.fn();
+		await worker.fetch(new Request("https://x/", { method: "POST", headers: { authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ email: "a@b.co", mode: "precheck" }) }), env({ CACHE: { get, put } as unknown as KVNamespace }), ctx);
+		expect(get).not.toHaveBeenCalled();
+		expect(put).not.toHaveBeenCalled();
+	});
+});
+
 describe("fail open", () => {
 	it("on upstream error status", async () => {
 		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("no", { status: 403 }));

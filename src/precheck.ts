@@ -116,3 +116,23 @@ export function typoPrecheck(email: string): PrecheckHit | null {
 	const fixed = correctDomain(email.slice(at + 1));
 	return fixed ? { did_you_mean: `${email.slice(0, at)}@${fixed}` } : null;
 }
+
+const DISPOSABLE = new Set([
+	"mailinator.com", "guerrillamail.com", "guerrillamail.net", "sharklasers.com", "10minutemail.com", "yopmail.com",
+	"tempmail.com", "temp-mail.org", "trashmail.com", "throwawaymail.com", "getnada.com", "maildrop.cc", "dispostable.com",
+]);
+
+export function isDisposable(email: string): boolean {
+	return DISPOSABLE.has(email.slice(email.lastIndexOf("@") + 1).toLowerCase());
+}
+
+/** Stricter local syntax check (used in precheck mode only; full mode leaves syntax to Emailit). */
+export function strictSyntax(email: string): boolean {
+	const at = email.lastIndexOf("@");
+	if (at < 1 || at !== email.indexOf("@")) return false;
+	const local = email.slice(0, at);
+	const domain = email.slice(at + 1);
+	if (local.length > 64 || local.startsWith(".") || local.endsWith(".") || local.includes("..")) return false;
+	if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(local)) return false;
+	return /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(domain);
+}

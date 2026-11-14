@@ -61,6 +61,10 @@ Emailit's fast mode is lenient: `test@gnail.com` scores low risk and only gets a
 
 for misspellings (`gnail.com`, `gmial.com`, `hotmial.com`, `outlok.com`), wrong TLDs on the big brands (`gmail.co`, `gmail.con`, `gmail.nl`, `outlook.nl`), and dot or dash variants (`g-mail.com`, `gmailcom`). It is deliberately conservative: real provider domains (`hotmail.nl`, `live.nl`, `yahoo.co.uk`) pass, only labels of 5+ characters are fuzzy matched (one edit, same TLD group), and unrelated domains pass. Set `TYPO_PRECHECK=off` to skip it.
 
+### Precheck mode (live typing)
+
+Send `"mode":"precheck"` in the body (or `?mode=precheck`) to run only the local checks: syntax, typo domains and wrong TLDs, and a small list of well-known disposable domains. It never calls Emailit, never spends credits and never uses the cache. The response has the same shape plus `"mode":"precheck"`. Use it while the user types, and the default (full) mode on submit. A mode other than `precheck` or `full` is a `400`.
+
 ### Fail open
 
 If Emailit errors or does not answer within 3 seconds, the Worker answers `200 {"ok":true,"block":false,"error":"upstream"}`. A verification outage should never stop a signup.
