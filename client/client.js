@@ -179,12 +179,16 @@
 		function live(fromBlur) {
 			var email = norm(input.value);
 			if (!email || email.indexOf("@") < 1) { clearBox(); emit("idle"); return; }
+			// The undecided suggestion for this exact address is already on screen: a blur caused by
+			// moving focus to the Use button must not re-check or rebuild the box.
+			if (fromBlur && st.pending && st.pending.email === key(email)) return;
 			var id = ++st.seq;
 			emit("checking");
 			return post(endpoint, email, "precheck", TIMEOUT_MS).then(function (res) {
 				if (id !== st.seq || norm(input.value) !== email) return; // stale
 				if (!res) { clearBox(); emit("idle"); return; }
 				var sug = suggestionOf(res, email);
+				if (sug && st.pending && st.pending.email === key(email) && st.pending.suggestion === sug && box.querySelector(".ev-suggest")) return; // same box stays, keeps focus and highlight
 				if (sug) { showSuggestion(email, sug); emit("suggest", { suggestion: sug }); return; }
 				if (res.block && fromBlur) { showError(email); emit("blocked", { reason: res.reason }); return; }
 				clearBox();

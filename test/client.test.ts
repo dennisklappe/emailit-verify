@@ -207,6 +207,27 @@ describe("pending suggestion stops the submit (v2)", () => {
 			expect(box().classList.contains("ev-attn")).toBe(false); // animation class is removed, so the next attempt replays it
 		}
 	});
+	it("Enter while the field is focused: the blur precheck does not rebuild the box or steal focus", async () => {
+		await setup();
+		input().focus();
+		const useBefore = document.querySelector(".ev-use")!;
+		const wrapBefore = document.querySelector(".ev-suggest")!;
+		const r = await submit(); // attention() focuses Use, which blurs the input
+		expect(r).toMatchObject({ ok: false, pending: "suggestion" });
+		await settle(700); // any blur-triggered precheck has answered by now
+		expect(document.querySelector(".ev-use")).toBe(useBefore);
+		expect(document.querySelector(".ev-suggest")).toBe(wrapBefore);
+		expect(document.activeElement).toBe(useBefore);
+	});
+	it("a blur precheck that answers with the same suggestion leaves the box alone", async () => {
+		await setup();
+		const wrapBefore = document.querySelector(".ev-suggest")!;
+		(document.querySelector(".ev-use") as HTMLButtonElement).focus();
+		input().focus();
+		input().blur();
+		await settle(700);
+		expect(document.querySelector(".ev-suggest")).toBe(wrapBefore);
+	});
 	it("the first submit before the live check answered is also stopped", async () => {
 		responder = (_e, mode) => (mode === "full" ? typo : fine);
 		EV().attach(input(), { endpoint: "/x" });
